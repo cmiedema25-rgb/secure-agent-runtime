@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "default_effect": "deny",
+  "tools": {
+    "math.add": {
+      "required": ["a", "b"],
+      "arguments": {
+        "a": {"type": "number", "min": -1000000, "max": 1000000},
+        "b": {"type": "number", "min": -1000000, "max": 1000000}
+      }
+    },
+    "text.word_count": {
+      "required": ["text"],
+      "arguments": {
+        "text": {"type": "string", "max_length": 10000}
+      }
+    },
+    "text.summarize": {
+      "required": ["text"],
+      "arguments": {
+        "text": {"type": "string", "max_length": 4000},
+        "max_sentences": {"type": "integer", "min": 1, "max": 5}
+      }
+    }
+  }
+}
