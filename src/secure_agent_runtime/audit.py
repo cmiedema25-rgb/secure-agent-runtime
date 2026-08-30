@@ -1,82 +1,133 @@
+"""Append-only, HMAC-authenticated audit chain with no raw prompt retention."""
+
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
-from dataclasses import asdict, dataclass
+import threading
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from threading import Lock
+from pathlib import Path
 from typing import Any
 
-GENESIS_HASH = "0" * 64
+from .models import JsonValue
+from .policy import redact_json
+
+
+def _canonical(value: dict[str, Any]) -> bytes:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
 
 
 @dataclass(frozen=True, slots=True)
-class AuditEvent:
-    timestamp: str
-    correlation_id: str
-    session_id: str
-    tool: str
-    decision: str
-    reason: str
-    argument_names: tuple[str, ...]
-    result_type: str | None
-    previous_hash: str
-    event_hash: str
+class AuditVerification:
+    valid: bool
+    records: int
+    error: str | None = None
+
+    def to_dict(self) -> dict[str, JsonValue]:
+        return {"valid": self.valid, "records": self.records, "error": self.error}
 
 
-class AuditLog:
-    """Append-only in-memory log with a SHA-256 hash chain."""
+class HashChainAuditLog:
+    """An append-only JSONL log whose entries form an HMAC hash chain."""
 
-    def __init__(self) -> None:
-        self._events: list[AuditEvent] = []
-        self._lock = Lock()
-
-    @staticmethod
-    def _digest(payload: dict[str, Any], previous_hash: str) -> str:
-        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        return hashlib.sha256(f"{previous_hash}:{canonical}".encode()).hexdigest()
+    def __init__(self, path: str | Path, signing_key: str | bytes) -> None:
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        key = signing_key.encode("utf-8") if isinstance(signing_key, str) else signing_key
+        if len(key) < 16:
+            raise ValueError("audit signing key must contain at least 16 bytes")
+        self._key = key
+        self._lock = threading.Lock()
 
     def append(
         self,
         *,
-        correlation_id: str,
-        session_id: str,
-        tool: str,
-        decision: str,
-        reason: str,
-        arguments: dict[str, Any],
-        result: Any = None,
-    ) -> AuditEvent:
+        event: str,
+        request_id: str,
+        details: dict[str, JsonValue] | None = None,
+        sensitive_payload: JsonValue = None,
+    ) -> dict[str, JsonValue]:
+        safe_details = redact_json(details or {})
+        digest = hashlib.sha256(_canonical({"payload": sensitive_payload})).hexdigest()
         with self._lock:
-            previous = self._events[-1].event_hash if self._events else GENESIS_HASH
-            body = {
+            sequence, previous_hash = self._tail()
+            record: dict[str, JsonValue] = {
+                "sequence": sequence + 1,
                 "timestamp": datetime.now(UTC).isoformat(),
-                "correlation_id": correlation_id,
-                "session_id": session_id,
-                "tool": tool,
-                "decision": decision,
-                "reason": reason,
-                "argument_names": tuple(sorted(arguments)),
-                "result_type": type(result).__name__ if decision == "allowed" else None,
-                "previous_hash": previous,
+                "event": event,
+                "request_id": request_id,
+                "details": safe_details,
+                "payload_digest": digest,
+                "previous_hash": previous_hash,
             }
-            event = AuditEvent(**body, event_hash=self._digest(body, previous))
-            self._events.append(event)
-            return event
+            record_hash = hmac.new(self._key, _canonical(record), hashlib.sha256).hexdigest()
+            record["record_hash"] = record_hash
+            with self.path.open("a", encoding="utf-8", newline="\n") as handle:
+                handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+                handle.flush()
+            return record
 
-    def snapshot(self) -> tuple[AuditEvent, ...]:
+    def verify(self) -> AuditVerification:
         with self._lock:
-            return tuple(self._events)
+            if not self.path.exists():
+                return AuditVerification(True, 0)
+            previous_hash = "GENESIS"
+            expected_sequence = 1
+            try:
+                with self.path.open(encoding="utf-8") as handle:
+                    for line_number, line in enumerate(handle, start=1):
+                        if not line.strip():
+                            continue
+                        record = json.loads(line)
+                        actual_hash = record.pop("record_hash", None)
+                        expected_hash = hmac.new(
+                            self._key,
+                            _canonical(record),
+                            hashlib.sha256,
+                        ).hexdigest()
+                        if not isinstance(actual_hash, str) or not hmac.compare_digest(
+                            actual_hash, expected_hash
+                        ):
+                            return AuditVerification(
+                                False,
+                                expected_sequence - 1,
+                                f"record hash mismatch at line {line_number}",
+                            )
+                        if record.get("sequence") != expected_sequence:
+                            return AuditVerification(
+                                False,
+                                expected_sequence - 1,
+                                f"sequence mismatch at line {line_number}",
+                            )
+                        if record.get("previous_hash") != previous_hash:
+                            return AuditVerification(
+                                False,
+                                expected_sequence - 1,
+                                f"chain link mismatch at line {line_number}",
+                            )
+                        previous_hash = actual_hash
+                        expected_sequence += 1
+            except (OSError, json.JSONDecodeError, TypeError) as exc:
+                return AuditVerification(False, expected_sequence - 1, str(exc))
+            return AuditVerification(True, expected_sequence - 1)
 
-    def verify(self) -> bool:
-        previous = GENESIS_HASH
-        with self._lock:
-            for event in self._events:
-                body = asdict(event)
-                event_hash = body.pop("event_hash")
-                if body["previous_hash"] != previous:
-                    return False
-                if self._digest(body, previous) != event_hash:
-                    return False
-                previous = event_hash
-        return True
+    def _tail(self) -> tuple[int, str]:
+        if not self.path.exists():
+            return 0, "GENESIS"
+        last: dict[str, Any] | None = None
+        with self.path.open(encoding="utf-8") as handle:
+            for line in handle:
+                if line.strip():
+                    last = json.loads(line)
+        if last is None:
+            return 0, "GENESIS"
+        sequence = int(last["sequence"])
+        record_hash = str(last["record_hash"])
+        return sequence, record_hash

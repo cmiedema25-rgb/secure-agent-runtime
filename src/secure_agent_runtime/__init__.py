@@ -1,6 +1,14 @@
-"""Secure Agent Runtime public package."""
+"""Policy-enforced runtime for tool-using AI agents."""
 
-from .engine import RuntimeDenied, RuntimeEngine
+from .models import Decision, Message, RuntimeRequest, RuntimeResponse
+from .runtime import SecureAgentRuntime
 
-__all__ = ["RuntimeDenied", "RuntimeEngine"]
-__version__ = "0.1.0"
+__all__ = [
+    "Decision",
+    "Message",
+    "RuntimeRequest",
+    "RuntimeResponse",
+    "SecureAgentRuntime",
+]
+
+__version__ = "1.0.0"

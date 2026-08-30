@@ -1,0 +1,28 @@
+policy_version = "1.0"
+
+[thresholds]
+review_score = 35
+block_score = 70
+
+[input]
+max_chars = 12000
+max_messages = 32
+block_critical_findings = true
+block_encoded_injection = true
+
+[runtime]
+max_tool_rounds = 3
+max_tool_calls_per_round = 4
+fail_closed = true
+
+[tools]
+allowed = ["calculator", "document_search"]
+review_required = []
+
+[egress]
+require_https = true
+allowed_hosts = ["api.openai.com"]
+
+[output]
+block_secrets = true
+block_instruction_leakage = true

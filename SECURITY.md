@@ -1,21 +1,32 @@
 # Security Policy
 
-## Scope
+## Supported version
 
-This repository is a reference implementation of a policy-enforced tool runtime. It deliberately avoids arbitrary shell execution, dynamic imports controlled by agent input, and direct credential exposure to the agent.
+The current 1.x release line receives security fixes.
 
 ## Reporting a vulnerability
 
-Do not publish active secrets, tokens, private keys, or sensitive exploit data in a public issue. Provide a minimal reproduction that demonstrates the security boundary being violated.
+Use the repository's private GitHub Security Advisory form. Do not open a
+public issue containing exploit details, credentials, private prompts, or audit
+signing material.
 
-Useful reports include:
+Include the affected version, configuration, reproduction steps, expected and
+observed behavior, and any proposed mitigation. Reports that demonstrate a
+policy bypass should state whether the bypass occurs at input screening, tool
+authorization, tool-output screening, provider output screening, or audit
+verification.
 
-- a tool executing without a matching session capability;
-- a policy validation bypass;
-- argument smuggling that reaches a registered handler;
-- an audit-chain integrity failure;
-- a rate-limit bypass in the documented single-process threat model.
+## Scope
 
-## Production hardening
+In scope:
 
-Before using this pattern in a production environment, add authenticated principals, durable session storage, distributed rate limiting, external policy administration, secrets management, process or workload isolation for high-risk tools, telemetry export, dependency scanning, and deployment-specific network controls.
+- policy bypasses that result in unauthorized tool execution;
+- prompt or credential leakage through provider output;
+- egress allowlist bypasses;
+- audit-chain tampering that is not detected;
+- parser or normalization behavior that creates a practical injection bypass;
+- denial-of-service conditions within documented input limits.
+
+The curated evaluation corpus is a regression suite, not a security
+certification. New attack classes should be added as failing regression cases
+before a fix is merged.
