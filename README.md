@@ -50,6 +50,8 @@ secure-agent-runtime/
 │   ├── rate_limit.py     # in-memory fixed-window limiter
 │   ├── registry.py       # explicit tool registry
 │   └── tools.py          # safe example tools
+├── docs/architecture.md  # trust boundaries and threat model
+├── examples/demo_client.py
 ├── policies/default.json
 ├── tests/
 ├── .github/workflows/ci.yml
@@ -68,6 +70,14 @@ uvicorn secure_agent_runtime.api:app --reload
 ```
 
 Open `http://127.0.0.1:8000/docs` for the generated OpenAPI UI.
+
+In a second terminal, run the demonstration client:
+
+```bash
+python examples/demo_client.py
+```
+
+The demo creates a constrained session, executes an allowed tool, deliberately requests a capability that was not granted, verifies the request is denied, and checks the audit-chain integrity endpoint.
 
 ## Example request
 
@@ -93,6 +103,8 @@ A request for a tool outside the session capability set is denied before the too
 
 The runtime assumes the agent or model may be unreliable, prompt-injected, or adversarially influenced. It therefore treats model-generated tool calls as untrusted input. The runtime is designed to contain authority at the application boundary.
 
+The full trust-boundary analysis and production extension model are documented in [`docs/architecture.md`](docs/architecture.md).
+
 This example does **not** claim to be a complete sandbox for hostile native code. Production deployments should place high-risk tools in separate processes or isolated workloads, use durable audit storage, external identity, distributed rate limiting, and a secrets manager.
 
 ## Skills demonstrated
@@ -104,7 +116,9 @@ This example does **not** claim to be a complete sandbox for hostile native code
 - Python backend engineering
 - FastAPI + Pydantic
 - Policy enforcement and capability-based security
+- Threat modeling and secure system design
 - Automated testing and CI/CD
+- Containerized deployment
 
 ## License
 
