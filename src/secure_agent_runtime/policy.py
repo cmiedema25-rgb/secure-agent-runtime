@@ -50,7 +50,7 @@ class PolicyEngine:
         type_ok = {
             "string": isinstance(value, str),
             "integer": isinstance(value, int) and not isinstance(value, bool),
-            "number": isinstance(value, (int, float)) and not isinstance(value, bool),
+            "number": isinstance(value, int | float) and not isinstance(value, bool),
             "boolean": isinstance(value, bool),
         }.get(expected, False)
         if not type_ok:
@@ -62,7 +62,7 @@ class PolicyEngine:
             if "allowed_values" in spec and value not in spec["allowed_values"]:
                 return f"value_not_allowed:{name}"
 
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if isinstance(value, int | float) and not isinstance(value, bool):
             if "min" in spec and value < spec["min"]:
                 return f"below_minimum:{name}"
             if "max" in spec and value > spec["max"]:
