@@ -14,7 +14,7 @@ class AgentSession:
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @classmethod
-    def create(cls, capabilities: set[str] | frozenset[str]) -> "AgentSession":
+    def create(cls, capabilities: set[str] | frozenset[str]) -> AgentSession:
         return cls(session_id=str(uuid4()), capabilities=frozenset(capabilities))
 
     def permits(self, tool_name: str) -> bool:
