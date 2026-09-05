@@ -27,6 +27,11 @@ make verify
 - Tamper-evident audit chain (`secure-agent verify-audit`)
 - Optional OpenAI-compatible HTTPS provider + local JSON API (`secure-agent serve`)
 
+
+## Who this is for
+
+Teams wiring tool-using agents who need a thin policy layer in front of model I/O and tool calls — block or review before side effects, keep a verifiable audit trail. Offline by default so CI and local demos do not need an API key.
+
 ## Red-team corpus
 
 `evals/attack_corpus.jsonl` — 34 regression cases exercised in CI. Pattern defenses are not a guarantee against novel attacks; see `docs/THREAT_MODEL.md`.
